@@ -1,45 +1,43 @@
-from telegram import Update, Bot
-from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 import logging
-import os
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
+from aiogram.utils import executor
 
-# Konfigurasi Logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Konfigurasi Bot
+API_TOKEN = "7748807929:AAFCN3G4dJ7YMYZDu9iydC6yniK_F2kl9R8"
+DATABASE_CHAT_ID = "@MilioMilioOhyeah"
 
-# Ganti dengan token bot yang kamu dapat dari BotFather
-TOKEN = "7748807929:AAFCN3G4dJ7YMYZDu9iydC6yniK_F2kl9R8"
-CHANNEL_ID = "@Media_ForwarderBot"  # atau gunakan ID numerik channel jika private
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
 
-# Fungsi untuk menangani pesan masuk
-def forward_media(update: Update, context: CallbackContext):
-    user = update.message.from_user
-    file = None
-    caption = f"📤 Forwarded by: {user.full_name} (ID: {user.id})"
+# Logging
+logging.basicConfig(level=logging.INFO)
+
+@dp.message_handler(commands=['start'])
+async def start(message: Message):
+    await message.reply("Give me the links")
+
+@dp.message_handler()
+async def process_link(message: Message):
+    link = message.text.strip()
+    if not link.startswith("https://t.me/"):
+        await message.reply("Invalid link. Please provide a valid Telegram file link.")
+        return
     
-    if update.message.photo:
-        file = update.message.photo[-1].file_id
-    elif update.message.video:
-        file = update.message.video.file_id
-    elif update.message.document:
-        file = update.message.document.file_id
-    elif update.message.audio:
-        file = update.message.audio.file_id
-    elif update.message.voice:
-        file = update.message.voice.file_id
-    
-    if file:
-        context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
-        context.bot.send_document(chat_id=CHANNEL_ID, document=file, caption=caption)
+    try:
+        # Mengunduh file dari link
+        file = await bot.get_file_by_link(link)
+        file_path = file.file_path
+        
+        # Kirim file ke grup backup (Database)
+        await bot.send_document(DATABASE_CHAT_ID, file_path, caption="Backup File")
+        
+        # Kirim file ke user
+        await bot.send_document(message.chat.id, file_path, caption="Here is your file")
+    except Exception as e:
+        logging.error(f"Error processing file: {e}")
+        await message.reply("Failed to retrieve file. Ensure the link is correct and try again.")
 
-# Setup bot
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-    
-    dp.add_handler(MessageHandler(Filters.chat_type.groups & Filters.media, forward_media))
-    
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
